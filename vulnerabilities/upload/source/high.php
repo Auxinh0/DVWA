@@ -3,7 +3,7 @@
 if( isset( $_POST[ 'Upload' ] ) ) {
 	// File information
 	$uploaded_name = $_FILES[ 'uploaded' ][ 'name' ];
-	$uploaded_ext  = substr( $uploaded_name, strrpos( $uploaded_name, '.' ) + 1 );
+	$uploaded_ext  = substr( $uploaded_name, strrpos( $uploaded_name, '.' ) + 1);
 	$uploaded_size = $_FILES[ 'uploaded' ][ 'size' ];
 	$uploaded_type = $_FILES[ 'uploaded' ][ 'type' ];
 	$uploaded_tmp  = $_FILES[ 'uploaded' ][ 'tmp_name' ];
@@ -11,34 +11,36 @@ if( isset( $_POST[ 'Upload' ] ) ) {
 	// Where are we going to be writing to?
 	$target_path   = DVWA_WEB_PAGE_TO_ROOT . 'hackable/uploads/';
 
-	// Generate a single random name with a safe, fixed extension so the file can
-	// never be served/executed as PHP (the uploaded name is never trusted). The
-	// old check allowed a double extension like "shell.php.jpg" through.
-	$random_name   = bin2hex( random_bytes( 16 ) ) . '.' . strtolower( $uploaded_ext );
-	$target_file   = $random_name;
+	// Generate a single random name, so the attacker never controls the path or
+	// the extension of what ends up under the web root
+	$random_name   =  bin2hex( random_bytes(16) ) . '.' . $uploaded_ext;
+
+	$target_file   =  $random_name;
 	$temp_file     = ( ( ini_get( 'upload_tmp_dir' ) == '' ) ? ( sys_get_temp_dir() ) : ( ini_get( 'upload_tmp_dir' ) ) );
 	$temp_file    .= DIRECTORY_SEPARATOR . $random_name;
 
-	// Is it really an image? Check extension, size, MIME type AND that the bytes
-	// actually decode as an image.
+	// Is it an image? The extension and the size are checked, but what decides the
+	// format is getimagesize() reading the file itself -- the Content-Type the
+	// client sends is just another attacker-supplied string
+	$image_info = getimagesize( $uploaded_tmp );
+	$detected   = $image_info ? $image_info[2] : false;
+
 	if( ( strtolower( $uploaded_ext ) == 'jpg' || strtolower( $uploaded_ext ) == 'jpeg' || strtolower( $uploaded_ext ) == 'png' ) &&
 		( $uploaded_size < 100000 ) &&
-		( $uploaded_type == 'image/jpeg' || $uploaded_type == 'image/png' ) &&
-		getimagesize( $uploaded_tmp ) ) {
+		( $detected === IMAGETYPE_JPEG || $detected === IMAGETYPE_PNG ) ) {
 
-		// Re-encode the image, which strips any embedded payload (e.g. PHP after
-		// the image data) so nothing executable survives the upload.
-		if( $uploaded_type == 'image/jpeg' ) {
+		// Strip any metadata, by re-encoding image (Note, using php-Imagick is recommended over php-GD)
+		if( $detected === IMAGETYPE_JPEG ) {
 			$img = imagecreatefromjpeg( $uploaded_tmp );
-			imagejpeg( $img, $temp_file, 100 );
+			imagejpeg( $img, $temp_file, 100);
 		}
 		else {
 			$img = imagecreatefrompng( $uploaded_tmp );
-			imagepng( $img, $temp_file, 9 );
+			imagepng( $img, $temp_file, 9);
 		}
 		imagedestroy( $img );
 
-		// Move the re-encoded file into the web root under its random name.
+		// Can we move the file to the web root from the temp folder?
 		if( rename( $temp_file, ( getcwd() . DIRECTORY_SEPARATOR . $target_path . $target_file ) ) ) {
 			// Yes!
 			$html .= "<pre><a href='{$target_path}{$target_file}'>{$target_file}</a> succesfully uploaded!</pre>";

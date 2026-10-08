@@ -53,11 +53,10 @@ $page[ 'body' ] .= "
 		</div><br />
 		<form action=\"#\" method=\"GET\">";
 
-if( $vulnerabilityFile == 'impossible.php' ) {
-	$page[ 'body' ] .= "
+// Every level verifies the current password now, so every level has to ask for it
+$page[ 'body' ] .= "
 			Current password:<br />
 			<input type=\"password\" AUTOCOMPLETE=\"off\" name=\"password_current\"><br />";
-}
 
 $page[ 'body' ] .= "
 			New password:<br />
@@ -67,7 +66,7 @@ $page[ 'body' ] .= "
 			<br />
 			<input type=\"submit\" value=\"Change\" name=\"Change\">\n";
 
-// Every level now enforces an Anti-CSRF token, so always render the token field.
+// Every level checks the Anti-CSRF token now, so every level has to emit one
 $page[ 'body' ] .= "			" . tokenField();
 
 $page[ 'body' ] .= "

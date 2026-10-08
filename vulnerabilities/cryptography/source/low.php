@@ -1,33 +1,44 @@
 <?php
 
-// Strong, authenticated encryption replaces the trivially-reversible XOR
-// cipher. A short repeating-key XOR leaks the plaintext to known-plaintext /
-// frequency analysis; AES-256-GCM does not.
-function crypto_key( $key ) {
-	return hash( 'sha256', $key, true );
+// A repeating-key XOR is not encryption: the key length shows up in the output,
+// and anything known about the plaintext recovers the key a byte at a time. This
+// uses an authenticated cipher instead, with a random IV per message, so the same
+// text never encodes to the same string twice and an edited message is rejected.
+define ("CRYPTO_ALGO", "aes-256-gcm");
+
+function seal ($cleartext, $key) {
+    $iv  = openssl_random_pseudo_bytes (12);
+    $tag = "";
+    $e = openssl_encrypt ($cleartext, CRYPTO_ALGO, hash ("sha256", $key, true), OPENSSL_RAW_DATA, $iv, $tag);
+    if ($e === false) {
+        throw new Exception ("Encryption failed");
+    }
+    return $iv . $tag . $e;
 }
 
-function encode_message( $cleartext, $key ) {
-	$iv  = random_bytes( 12 );
-	$tag = '';
-	$ct  = openssl_encrypt( $cleartext, 'aes-256-gcm', crypto_key( $key ), OPENSSL_RAW_DATA, $iv, $tag );
-	if ( $ct === false ) {
-		return '';
-	}
-	return $iv . $tag . $ct;
+function unseal ($ciphertext, $key) {
+    if (strlen ($ciphertext) < 28) {
+        throw new Exception ("Decryption failed");
+    }
+    $e = openssl_decrypt (substr ($ciphertext, 28), CRYPTO_ALGO, hash ("sha256", $key, true),
+                          OPENSSL_RAW_DATA, substr ($ciphertext, 0, 12), substr ($ciphertext, 12, 16));
+    if ($e === false) {
+        throw new Exception ("Decryption failed");
+    }
+    return $e;
 }
 
-function decode_message( $blob, $key ) {
-	$iv  = substr( $blob, 0, 12 );
-	$tag = substr( $blob, 12, 16 );
-	$ct  = substr( $blob, 28 );
-	if ( strlen( $iv ) != 12 || strlen( $tag ) != 16 ) {
-		return false;
-	}
-	return openssl_decrypt( $ct, 'aes-256-gcm', crypto_key( $key ), OPENSSL_RAW_DATA, $iv, $tag );
+// Neither the key nor the password live in the source any more. The old pair was
+// exposed twice over -- the key was readable in the code, and the cipher was weak
+// enough to recover the password from one intercepted message -- so both are
+// rotated: generated at random server side and never sent to the browser.
+if (!isset ($_SESSION['crypto_low_key'])) {
+	$_SESSION['crypto_low_key'] = random_bytes (32);
 }
-
-$key = "wachtwoord";
+if (!isset ($_SESSION['crypto_low_password'])) {
+	$_SESSION['crypto_low_password'] = bin2hex (random_bytes (12));
+}
+$key = $_SESSION['crypto_low_key'];
 
 $errors = "";
 $success = "";
@@ -42,20 +53,18 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 		if (array_key_exists ('message', $_POST)) {
 			$message = $_POST['message'];
 			if (array_key_exists ('direction', $_POST) && $_POST['direction'] == "decode") {
-				$encoded = decode_message (base64_decode ($message), $key);
-				if ($encoded === false) {
-					$encoded = "";
-					$errors = "Could not decode message.";
-				}
+				$encoded = unseal (base64_decode ($message), $key);
 				$encode_radio_selected = " ";
 				$decode_radio_selected = " checked='checked' ";
 			} else {
-				$encoded = base64_encode(encode_message ($message, $key));
+				$encoded = base64_encode(seal ($message, $key));
 			}
 		}
 		if (array_key_exists ('password', $_POST)) {
 			$password = $_POST['password'];
-			if ($password == "Olifant") {
+			// Constant-time comparison, so the response time does not leak how much
+			// of the secret was guessed correctly
+			if (is_string ($password) && hash_equals (hash ("sha256", $_SESSION['crypto_low_password']), hash ("sha256", $password))) {
 				$success = "Welcome back user";
 			} else {
 				$errors = "Login Failed";
@@ -76,7 +85,7 @@ $html = "
 				<textarea style='width: 600px; height: 56px' id='message' name='message'>" . htmlentities ($message) . "</textarea>
 			</p>
 			<p>
-				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or
+				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or 
 				<input type='radio' value='decode' name='direction' id='direction_decode' " . $decode_radio_selected . "><label for='direction_decode'>Decode</label>
 			</p>
 			<p>
@@ -99,7 +108,7 @@ $html .= "
 		You have intercepted the following message, decode it and log in below.
 		</p>
 		<p>
-		<textarea readonly='readonly' style='width: 600px; height: 28px' id='encoded' name='encoded'>Lg4WGlQZChhSFBYSEB8bBQtPGxdNQSwEHREOAQY=</textarea>
+		<textarea readonly='readonly' style='width: 600px; height: 28px' id='encoded' name='encoded'>" . htmlentities (base64_encode (seal ("Your new password is " . $_SESSION['crypto_low_password'], $key))) . "</textarea>
 		</p>
 ";
 

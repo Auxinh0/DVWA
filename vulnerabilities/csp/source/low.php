@@ -1,21 +1,29 @@
 <?php
 
-// Strict policy: only first-party scripts are allowed. The previous list of
-// third-party CDNs let an attacker host a payload on one of them and load it.
+// Only scripts served by this origin. The previous policy trusted a list of public
+// CDNs and paste sites -- anyone can upload the script that the policy then trusts,
+// so an allowlist of third parties is not a boundary at all
 $headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
 
-# These might work if you can't create your own for some reason
-# https://cdn.jsdelivr.net/gh/digininja/csp_bypass/alert.js
-# https://unpkg.com/@digininja/csp_bypass@1.0.0/index.js
-
 ?>
 <?php
 if (isset ($_POST['include'])) {
-$page[ 'body' ] .= "
-	<script src='" . $_POST['include'] . "'></script>
+	$include = $_POST['include'];
+
+	// The value becomes a <script src>, so accepting any URL means running any
+	// script. Only a path on this site is written into the page -- the policy
+	// above is the second line of defence, not the only one
+	if (is_string ($include) && preg_match ('#^/(?![/\\\\])[A-Za-z0-9._~/%-]*$#', $include)) {
+		$page[ 'body' ] .= "
+	<script src='" . htmlspecialchars( $include, ENT_QUOTES, 'UTF-8' ) . "'></script>
 ";
+	} else {
+		$page[ 'body' ] .= "
+	<p>Only scripts hosted on this site can be included.</p>
+";
+	}
 }
 $page[ 'body' ] .= '
 <form name="csp" method="POST">
