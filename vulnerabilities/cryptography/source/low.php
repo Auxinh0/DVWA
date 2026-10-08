@@ -1,16 +1,30 @@
 <?php
 
-function xor_this($cleartext, $key) {
-    // Our output text
-    $outText = '';
+// Strong, authenticated encryption replaces the trivially-reversible XOR
+// cipher. A short repeating-key XOR leaks the plaintext to known-plaintext /
+// frequency analysis; AES-256-GCM does not.
+function crypto_key( $key ) {
+	return hash( 'sha256', $key, true );
+}
 
-    // Iterate through each character
-    for($i=0; $i<strlen($cleartext);) {
-        for($j=0; ($j<strlen($key) && $i<strlen($cleartext)); $j++,$i++) {
-            $outText .= $cleartext[$i] ^ $key[$j];
-        }
-    }
-    return $outText;
+function encode_message( $cleartext, $key ) {
+	$iv  = random_bytes( 12 );
+	$tag = '';
+	$ct  = openssl_encrypt( $cleartext, 'aes-256-gcm', crypto_key( $key ), OPENSSL_RAW_DATA, $iv, $tag );
+	if ( $ct === false ) {
+		return '';
+	}
+	return $iv . $tag . $ct;
+}
+
+function decode_message( $blob, $key ) {
+	$iv  = substr( $blob, 0, 12 );
+	$tag = substr( $blob, 12, 16 );
+	$ct  = substr( $blob, 28 );
+	if ( strlen( $iv ) != 12 || strlen( $tag ) != 16 ) {
+		return false;
+	}
+	return openssl_decrypt( $ct, 'aes-256-gcm', crypto_key( $key ), OPENSSL_RAW_DATA, $iv, $tag );
 }
 
 $key = "wachtwoord";
@@ -28,16 +42,19 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 		if (array_key_exists ('message', $_POST)) {
 			$message = $_POST['message'];
 			if (array_key_exists ('direction', $_POST) && $_POST['direction'] == "decode") {
-				$encoded = xor_this (base64_decode ($message), $key);
+				$encoded = decode_message (base64_decode ($message), $key);
+				if ($encoded === false) {
+					$encoded = "";
+					$errors = "Could not decode message.";
+				}
 				$encode_radio_selected = " ";
 				$decode_radio_selected = " checked='checked' ";
 			} else {
-				$encoded = base64_encode(xor_this ($message, $key));
+				$encoded = base64_encode(encode_message ($message, $key));
 			}
 		}
 		if (array_key_exists ('password', $_POST)) {
 			$password = $_POST['password'];
-			$decoded = xor_this (base64_decode ($password), $key);
 			if ($password == "Olifant") {
 				$success = "Welcome back user";
 			} else {
@@ -59,7 +76,7 @@ $html = "
 				<textarea style='width: 600px; height: 56px' id='message' name='message'>" . htmlentities ($message) . "</textarea>
 			</p>
 			<p>
-				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or 
+				<input type='radio' value='encode' name='direction' id='direction_encode' " . $encode_radio_selected . "><label for='direction_encode'>Encode</label> or
 				<input type='radio' value='decode' name='direction' id='direction_decode' " . $decode_radio_selected . "><label for='direction_decode'>Decode</label>
 			</p>
 			<p>

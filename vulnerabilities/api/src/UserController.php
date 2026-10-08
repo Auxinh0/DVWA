@@ -221,9 +221,10 @@ class UserController
 		if (array_key_exists ("name", $input)) {
 			$this->data[$id]->name = $input['name'];
 		}
-		if (array_key_exists ("level", $input)) {
-			$this->data[$id]->level = intval ($input['level']);
-		}
+		// Mass assignment: "level" (the privilege/role field) is deliberately
+		// NOT accepted from the request body. This endpoint only updates the
+		// name; letting a caller also set "level" would let them promote
+		// themselves just by adding one key to the request.
 		$response['status_code_header'] = 'HTTP/1.1 200 OK';
 		$response['body'] = json_encode ($this->data[$id]->toArray($this->version));
 		return $response;

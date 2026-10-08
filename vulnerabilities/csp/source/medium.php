@@ -1,6 +1,8 @@
 <?php
 
-$headerCSP = "Content-Security-Policy: script-src 'self' 'unsafe-inline' 'nonce-TmV2ZXIgZ29pbmcgdG8gZ2l2ZSB5b3UgdXA=';";
+// Strict policy: no 'unsafe-inline' and no hardcoded/guessable nonce, so
+// attacker-supplied inline script can never execute.
+$headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
 

@@ -5,11 +5,13 @@ require_once DVWA_WEB_PAGE_TO_ROOT . 'dvwa/includes/dvwaPage.inc.php';
 dvwaDatabaseConnect();
 
 /*
-On impossible only the admin is allowed to retrieve the data.
+Only the admin is allowed to change user details — enforced on EVERY security
+level, so this endpoint can't be called directly to bypass the UI's auth.
 */
 
-if (dvwaSecurityLevelGet() == "impossible" && dvwaCurrentUser() != "admin") {
+if (dvwaCurrentUser() != "admin") {
 	print json_encode (array ("result" => "fail", "error" => "Access denied"));
+	http_response_code(403);
 	exit;
 }
 
@@ -44,8 +46,20 @@ try {
 	exit;
 }
 
-$query = "UPDATE users SET first_name = '" . $data->first_name . "', last_name = '" .  $data->surname . "' where user_id = " . $data->id . "";
-$result = mysqli_query($GLOBALS["___mysqli_ston"],  $query ) or die( '<pre>' . ((is_object($GLOBALS["___mysqli_ston"])) ? mysqli_error($GLOBALS["___mysqli_ston"]) : (($___mysqli_res = mysqli_connect_error()) ? $___mysqli_res : false)) . '</pre>' );
+// Validate the id and bind every value as a parameter (no SQL injection).
+if (!isset($data->id) || !is_numeric($data->id) || !isset($data->first_name) || !isset($data->surname)) {
+	print json_encode (array ("result" => "fail", "error" => "Invalid input"));
+	exit;
+}
+$user_id = (int)$data->id;
+$first_name = (string)$data->first_name;
+$surname = (string)$data->surname;
+
+$query = "UPDATE users SET first_name = ?, last_name = ? WHERE user_id = ?";
+$stmt = mysqli_prepare($GLOBALS["___mysqli_ston"], $query);
+mysqli_stmt_bind_param($stmt, "ssi", $first_name, $surname, $user_id);
+mysqli_stmt_execute($stmt) or die( '<pre>' . mysqli_stmt_error($stmt) . '</pre>' );
+mysqli_stmt_close($stmt);
 
 print json_encode (array ("result" => "ok"));
 exit;

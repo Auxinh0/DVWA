@@ -50,10 +50,21 @@ $page[ 'body' ] = <<<EOF
 				<script>
 					if (document.location.href.indexOf("default=") >= 0) {
 						var lang = document.location.href.substring(document.location.href.indexOf("default=")+8);
-						document.write("<option value='" + lang + "'>" + $decodeURI(lang) + "</option>");
-						document.write("<option value='' disabled='disabled'>----</option>");
+						// DOM-based XSS fix: only ever reflect the chosen language when
+						// it is one of the known, allow-listed options. Anything else
+						// (including script/markup payloads passed via the query string
+						// or the URL fragment) is ignored instead of written to the DOM.
+						// Because decodedLang can now only be one of the four fixed
+						// safe strings, writing it out cannot inject markup.
+						var allowedLangs = ["English", "French", "Spanish", "German"];
+						var decodedLang;
+						try { decodedLang = decodeURIComponent(lang.replace(/\+/g, " ")); } catch (e) { decodedLang = ""; }
+						if (allowedLangs.indexOf(decodedLang) !== -1) {
+							document.write("<option value='" + decodedLang + "'>" + decodedLang + "</option>");
+							document.write("<option value='' disabled='disabled'>----</option>");
+						}
 					}
-					    
+
 					document.write("<option value='English'>English</option>");
 					document.write("<option value='French'>French</option>");
 					document.write("<option value='Spanish'>Spanish</option>");

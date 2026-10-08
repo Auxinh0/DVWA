@@ -37,32 +37,17 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 		$phrase = $_POST['phrase'];
 		$token = $_POST['token'];
 
-		if ($phrase == "success") {
-			switch( dvwaSecurityLevelGet() ) {
-				case 'low':
-					if ($token == md5(str_rot13("success"))) {
-						$message = "<p style='color:red'>Well done!</p>";
-					} else {
-						$message = "<p>Invalid token.</p>";
-					}
-					break;
-				case 'medium':
-					if ($token == strrev("XXsuccessXX")) {
-						$message = "<p style='color:red'>Well done!</p>";
-					} else {
-						$message = "<p>Invalid token.</p>";
-					}
-					break;
-				case 'high':
-					if ($token == hash("sha256", hash("sha256", "XX" . strrev("success")) . "ZZ")) {
-						$message = "<p style='color:red'>Well done!</p>";
-					} else {
-						$message = "<p>Invalid token.</p>";
-					}
-					break;
-				default:
-					$vulnerabilityFile = 'impossible.php';
-					break;
+		// The token the server accepts is one the SERVER itself issued (a random
+		// value kept in the session), validated with a constant-time comparison.
+		// Deriving the token from the phrase with any published algorithm -- a
+		// rot13+md5, a reversal, a chain of sha256 -- lets anyone compute a valid
+		// token without ever loading the page, so the client-supplied value is
+		// never trusted whatever the security level.
+		if ($phrase === "success") {
+			if ( isset( $_SESSION[ 'js_token' ] ) && is_string( $token ) && hash_equals( $_SESSION[ 'js_token' ], $token ) ) {
+				$message = "<p style='color:red'>Well done!</p>";
+			} else {
+				$message = "<p>Invalid token.</p>";
 			}
 		} else {
 			$message = "<p>You got the phrase wrong.</p>";
@@ -71,6 +56,12 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 		$message = "<p>Missing phrase or token.</p>";
 	}
 }
+
+// Issue a fresh, unpredictable token for the form below and keep it in the
+// session. It is what the check above compares against, so a token a client
+// computed on its own (or captured earlier) will not be accepted.
+$_SESSION[ 'js_token' ] = bin2hex( random_bytes( 16 ) );
+$js_token = $_SESSION[ 'js_token' ];
 
 if ( dvwaSecurityLevelGet() == "impossible" ) {
 $page[ 'body' ] = <<<EOF
@@ -95,7 +86,7 @@ $page[ 'body' ] = <<<EOF
 	$message
 
 	<form name="low_js" method="post">
-		<input type="hidden" name="token" value="" id="token" />
+		<input type="hidden" name="token" value="$js_token" id="token" />
 		<label for="phrase">Phrase</label> <input type="text" name="phrase" value="ChangeMe" id="phrase" />
 		<input type="submit" id="send" name="send" value="Submit" />
 	</form>

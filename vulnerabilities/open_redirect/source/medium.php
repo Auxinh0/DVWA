@@ -1,16 +1,21 @@
 <?php
 
+// The old check only blocked "http://"/"https://", which can be bypassed with a
+// protocol-relative URL ("//evil.com") or tricks like "https:/evil.com". Use an
+// explicit allowlist of known-safe, relative targets instead.
+$allowed_targets = array( 'info.php?id=1', 'info.php?id=2' );
+
 if (array_key_exists ("redirect", $_GET) && $_GET['redirect'] != "") {
-	if (preg_match ("/http:\/\/|https:\/\//i", $_GET['redirect'])) {
-		http_response_code (500);
-		?>
-		<p>Absolute URLs not allowed.</p>
-		<?php
-		exit;
-	} else {
+	if (in_array ($_GET['redirect'], $allowed_targets, true)) {
 		header ("location: " . $_GET['redirect']);
 		exit;
 	}
+
+	http_response_code (500);
+	?>
+	<p>Invalid redirect target.</p>
+	<?php
+	exit;
 }
 
 http_response_code (500);

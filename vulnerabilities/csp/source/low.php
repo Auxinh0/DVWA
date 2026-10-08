@@ -1,6 +1,8 @@
 <?php
 
-$headerCSP = "Content-Security-Policy: script-src 'self' https://pastebin.com hastebin.com www.toptal.com example.com code.jquery.com https://ssl.google-analytics.com unpkg.com cdn.jsdelivr.net digi.ninja ;"; // allows js from various trusted locations
+// Strict policy: only first-party scripts are allowed. The previous list of
+// third-party CDNs let an attacker host a payload on one of them and load it.
+$headerCSP = "Content-Security-Policy: script-src 'self';";
 
 header($headerCSP);
 

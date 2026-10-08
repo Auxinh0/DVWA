@@ -1,6 +1,19 @@
 <?php
 function decrypt ($ciphertext, $key) {
-	$e = openssl_decrypt($ciphertext, 'aes-128-ecb', $key, OPENSSL_PKCS1_PADDING);
+	// Authenticated decryption (GCM): a manipulated or block-shuffled token
+	// fails the integrity tag check, so the ECB block-splicing attack that
+	// forged a "sweep"/"admin" token no longer works.
+	$binkey = hash( 'sha256', $key, true );
+
+	$iv  = substr( $ciphertext, 0, 12 );
+	$tag = substr( $ciphertext, 12, 16 );
+	$ct  = substr( $ciphertext, 28 );
+
+	if ( strlen( $iv ) != 12 || strlen( $tag ) != 16 ) {
+		throw new Exception ("Decryption failed");
+	}
+
+	$e = openssl_decrypt($ct, 'aes-256-gcm', $binkey, OPENSSL_RAW_DATA, $iv, $tag);
 	if ($e === false) {
 		throw new Exception ("Decryption failed");
 	}
@@ -19,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] == "POST") {
 			throw new Exception ("No token passed");
 		} else {
 			$token = $_POST['token'];
-			if (strlen($token) % 32 != 0) {
+			if (strlen($token) % 2 != 0 || !ctype_xdigit($token)) {
 				throw new Exception ("Token is in wrong format");
 			} else {
 				$decrypted = decrypt(hex2bin ($token), $key);
@@ -76,7 +89,7 @@ $html = "
 You also spot this comment in the docs:
 </p>
 <blockquote><i>
-To ensure your security, we use aes-128-ecb throughout our application.
+To ensure your security, we use authenticated encryption throughout our application.
 </i></blockquote>
 
 		<hr>

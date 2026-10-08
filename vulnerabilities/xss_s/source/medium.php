@@ -10,9 +10,11 @@ if( isset( $_POST[ 'btnSign' ] ) ) {
 	$message = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $message ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
 	$message = htmlspecialchars( $message );
 
-	// Sanitize name input
-	$name = str_replace( '<script>', '', $name );
+	// Sanitize name input -- a str_replace blacklist is trivially bypassed, so the
+	// value is HTML-encoded instead (prevents stored XSS through the name field).
+	$name = stripslashes( $name );
 	$name = ((isset($GLOBALS["___mysqli_ston"]) && is_object($GLOBALS["___mysqli_ston"])) ? mysqli_real_escape_string($GLOBALS["___mysqli_ston"],  $name ) : ((trigger_error("[MySQLConverterToo] Fix the mysql_escape_string() call! This code does not work.", E_USER_ERROR)) ? "" : ""));
+	$name = htmlspecialchars( $name );
 
 	// Update database
 	$query  = "INSERT INTO guestbook ( comment, name ) VALUES ( '$message', '$name' );";
